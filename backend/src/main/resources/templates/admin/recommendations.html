@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Recommendation Controls</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>Recommendation Controls</h1>
+        <p>Tune exploration, caps, and diversity</p>
+    </div>
+    <div><a th:href="@{/}">Home</a></div>
+</header>
+<main class="content">
+    <section class="card">
+        <h2>Engine Config</h2>
+        <div id="error" class="alert error" style="display:none;"></div>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>
+            <tbody id="configRows"></tbody>
+        </table>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+        <h2>Exposure Stats (7 days)</h2>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead><tr><th>SKU</th><th>Region</th><th>Surface</th><th>Impressions</th></tr></thead>
+            <tbody id="statsRows"></tbody>
+        </table>
+    </section>
+</main>
+<script>
+    const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+    const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+    const headers = {"Content-Type": "application/json"};
+    headers[csrfHeader] = csrfToken;
+
+    const errorEl = document.getElementById("error");
+    function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.style.display = "block";
+    }
+
+    async function loadConfig() {
+        const res = await fetch("/api/admin/recommendations/config");
+        const body = await res.json();
+        const tbody = document.getElementById("configRows");
+        tbody.textContent = "";
+        body.forEach((row) => {
+            const tr = document.createElement("tr");
+            const keyTd = document.createElement("td");
+            keyTd.textContent = String(row.key);
+            const valueTd = document.createElement("td");
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = String(row.value ?? "");
+            input.setAttribute("data-k", String(row.key));
+            valueTd.appendChild(input);
+            const actionTd = document.createElement("td");
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.textContent = "Save";
+            actionTd.appendChild(saveBtn);
+            tr.append(keyTd, valueTd, actionTd);
+            saveBtn.onclick = async () => {
+                const r = await fetch("/api/admin/recommendations/config/" + row.key, {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: headers,
+                    body: JSON.stringify({ value: input.value })
+                });
+                if (!r.ok) {
+                    const err = await r.json();
+                    showError(err.message || "Failed to update config");
+                    return;
+                }
+            };
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function loadStats() {
+        const res = await fetch("/api/admin/recommendations/stats?days=7");
+        const body = await res.json();
+        const tbody = document.getElementById("statsRows");
+        tbody.textContent = "";
+        body.forEach((row) => {
+            const tr = document.createElement("tr");
+            const skuTd = document.createElement("td");
+            skuTd.textContent = String(row.sku);
+            const regionTd = document.createElement("td");
+            regionTd.textContent = String(row.region);
+            const surfaceTd = document.createElement("td");
+            surfaceTd.textContent = String(row.surface);
+            const impressionsTd = document.createElement("td");
+            impressionsTd.textContent = String(row.impressions);
+            tr.append(skuTd, regionTd, surfaceTd, impressionsTd);
+            tbody.appendChild(tr);
+        });
+    }
+
+    loadConfig();
+    loadStats();
+</script>
+</body>
+</html>

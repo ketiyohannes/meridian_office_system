@@ -1,0 +1,67 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ENV_EXAMPLE="${ROOT_DIR}/.env.example"
+ENV_FILE="${ROOT_DIR}/.env"
+RUNTIME_DIR="${ROOT_DIR}/docker/runtime"
+MYSQL_ENV_FILE="${RUNTIME_DIR}/mysql.env"
+APP_ENV_FILE="${RUNTIME_DIR}/app-dev.env"
+
+if [ ! -f "${ENV_FILE}" ]; then
+  cp "${ENV_EXAMPLE}" "${ENV_FILE}"
+  echo "[bootstrap] created .env from .env.example"
+else
+  echo "[bootstrap] .env already exists; leaving as-is"
+fi
+
+mkdir -p "${ROOT_DIR}/.mysql-data"
+mkdir -p "${RUNTIME_DIR}"
+
+# Load env values from .env for generating runtime config snapshots.
+set -a
+# shellcheck source=/dev/null
+. "${ENV_FILE}"
+set +a
+
+MYSQL_DATABASE="${MYSQL_DATABASE:-meridian}"
+MYSQL_USER="${MYSQL_USER:-meridian_user}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-meridian_password}"
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-meridian_root_password}"
+SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-docker}"
+TZ="${TZ:-Africa/Addis_Ababa}"
+MERIDIAN_BOOTSTRAP_ADMIN_USERNAME="${MERIDIAN_BOOTSTRAP_ADMIN_USERNAME:-admin}"
+MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD="${MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD:-LocalDevAdmin!2026}"
+MERIDIAN_DATA_ENCRYPTION_KEY="${MERIDIAN_DATA_ENCRYPTION_KEY:-MeridianDevSecretKey2026AlphaXYZ}"
+MERIDIAN_REPORTING_SHARED_FOLDER="${MERIDIAN_REPORTING_SHARED_FOLDER:-/tmp/meridian-report-packages}"
+MERIDIAN_REPORTING_RETENTION_DAYS="${MERIDIAN_REPORTING_RETENTION_DAYS:-90}"
+
+if [ "${#MERIDIAN_DATA_ENCRYPTION_KEY}" -ne 32 ]; then
+  echo "[bootstrap] MERIDIAN_DATA_ENCRYPTION_KEY must be exactly 32 characters (current: ${#MERIDIAN_DATA_ENCRYPTION_KEY})"
+  exit 1
+fi
+
+cat > "${MYSQL_ENV_FILE}" <<EOF
+MYSQL_DATABASE=${MYSQL_DATABASE}
+MYSQL_USER=${MYSQL_USER}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+TZ=${TZ}
+EOF
+
+cat > "${APP_ENV_FILE}" <<EOF
+SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
+SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Africa/Addis_Ababa
+SPRING_DATASOURCE_USERNAME=${MYSQL_USER}
+SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
+MERIDIAN_BOOTSTRAP_ADMIN_USERNAME=${MERIDIAN_BOOTSTRAP_ADMIN_USERNAME}
+MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD=${MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD}
+MERIDIAN_DATA_ENCRYPTION_KEY=${MERIDIAN_DATA_ENCRYPTION_KEY}
+MERIDIAN_REPORTING_SHARED_FOLDER=${MERIDIAN_REPORTING_SHARED_FOLDER}
+MERIDIAN_REPORTING_RETENTION_DAYS=${MERIDIAN_REPORTING_RETENTION_DAYS}
+TZ=${TZ}
+EOF
+
+echo "[bootstrap] runtime env snapshots updated:"
+echo "  - ${MYSQL_ENV_FILE}"
+echo "  - ${APP_ENV_FILE}"

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Exception Review</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .panel { background:#fff; border:1px solid #dbe3ee; border-radius:12px; padding:16px; margin-bottom:16px; }
+        table th, table td { text-align:left; padding:8px; border-bottom:1px solid #edf2f7; vertical-align:top; }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>Exception Requests</h1>
+        <p th:if="${canDecide}">Ops/Admin approval console</p>
+        <p th:unless="${canDecide}">Analyst read-only operations view</p>
+    </div>
+    <div><a th:href="@{/}">Home</a></div>
+</header>
+<main class="content">
+    <section class="panel">
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th>Key</th><th>User</th><th>Type</th><th>Details</th>
+                <th th:if="${canDecide}">Action</th>
+                <th th:unless="${canDecide}">Mode</th>
+            </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+        </table>
+    </section>
+</main>
+<script th:inline="javascript">
+    const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+    const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+    const headers = { "Content-Type": "application/json" };
+    headers[csrfHeader] = csrfToken;
+    const rows = document.getElementById("rows");
+
+    const canDecide = /*[[${canDecide}]]*/ false;
+
+    async function decide(id, approved) {
+        if (!canDecide) {
+            return;
+        }
+        await fetch("/api/exceptions/" + id + "/decision", {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: headers,
+            body: JSON.stringify({ approved: approved, comment: approved ? "approved" : "rejected" })
+        });
+        await load();
+    }
+
+    async function load() {
+        const res = await fetch("/api/exceptions/pending", { credentials: "same-origin" });
+        const body = await res.json();
+        rows.innerHTML = "";
+        if (!res.ok || !body.length) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 5;
+            td.textContent = !res.ok ? "Failed to load pending exceptions." : "No pending exceptions.";
+            tr.appendChild(td);
+            rows.appendChild(tr);
+            return;
+        }
+        body.forEach((item) => {
+            const tr = document.createElement("tr");
+            [item.requestKey, item.requesterUsername, item.requestType, item.details].forEach((value) => {
+                const td = document.createElement("td");
+                td.textContent = String(value);
+                tr.appendChild(td);
+            });
+            const action = document.createElement("td");
+            if (canDecide) {
+                const approve = document.createElement("button");
+                approve.type = "button";
+                approve.textContent = "Approve";
+                approve.onclick = () => decide(item.id, true);
+                const reject = document.createElement("button");
+                reject.type = "button";
+                reject.style.marginLeft = "8px";
+                reject.textContent = "Reject";
+                reject.onclick = () => decide(item.id, false);
+                action.appendChild(approve);
+                action.appendChild(reject);
+            } else {
+                action.textContent = "Read-only";
+            }
+            tr.appendChild(action);
+            rows.appendChild(tr);
+        });
+    }
+
+    load();
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Dashboard</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .panel { background:#fff; border:1px solid #dbe3ee; border-radius:12px; padding:16px; margin-bottom:16px; }
+        .grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
+        .kpi { border:1px solid #e2e8f0; border-radius:10px; padding:12px; background:#f8fafc; }
+        .kpi .label { color:#64748b; font-size:13px; }
+        .kpi .value { font-size:24px; font-weight:700; margin-top:6px; }
+        .kpi.skeleton .value { color: transparent; background: linear-gradient(90deg,#eef2f7 25%,#f7fafc 37%,#eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+        table th, table td { text-align:left; padding:8px; border-bottom:1px solid #edf2f7; }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+        @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>KPI Dashboard</h1>
+        <p>GMV, conversion, AOV, repeat, fulfillment, cancellations</p>
+    </div>
+    <div><a th:href="@{/}">Home</a></div>
+</header>
+
+<main class="content">
+    <section class="panel">
+        <form id="filterForm" class="auth-form">
+            <label>From</label>
+            <input type="datetime-local" name="from">
+            <label>To</label>
+            <input type="datetime-local" name="to">
+            <label>Category</label>
+            <input type="text" name="category" placeholder="Electronics">
+            <label>Product SKU</label>
+            <input type="text" name="product" placeholder="SKU-1001">
+            <label>Channel</label>
+            <input type="text" name="channel" placeholder="STORE / ONLINE">
+            <label>Role</label>
+            <input type="text" name="role" placeholder="REGULAR_USER">
+            <label>Region</label>
+            <input type="text" name="region" placeholder="NE-1">
+            <button type="submit">Apply Filters</button>
+        </form>
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a id="csvExport" href="/api/analytics/export.csv">Export CSV</a>
+            <a id="xlsxExport" href="/api/analytics/export.xlsx">Export XLSX</a>
+        </div>
+        <div id="error" class="alert error" style="display:none; margin-top:10px;"></div>
+    </section>
+
+    <section class="panel">
+        <div class="grid">
+            <div class="kpi"><div class="label">GMV</div><div id="gmv" class="value">-</div></div>
+            <div class="kpi"><div class="label">Order Volume</div><div id="orderVolume" class="value">-</div></div>
+            <div class="kpi"><div class="label">Conversion Rate</div><div id="conversionRate" class="value">-</div></div>
+            <div class="kpi"><div class="label">Average Order Value</div><div id="aov" class="value">-</div></div>
+            <div class="kpi"><div class="label">Repeat Purchase Rate</div><div id="repeatRate" class="value">-</div></div>
+            <div class="kpi"><div class="label">Fulfillment Timeliness</div><div id="fulfillment" class="value">-</div></div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h3>Cancellation Reasons</h3>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead><tr><th>Reason</th><th>Count</th></tr></thead>
+            <tbody id="cancelRows"></tbody>
+        </table>
+    </section>
+
+    <section class="panel">
+        <h3>Nightly Report Packages</h3>
+        <ul id="packages"></ul>
+    </section>
+</main>
+
+<script>
+    var form = document.getElementById("filterForm");
+    var errorBox = document.getElementById("error");
+    var csvLink = document.getElementById("csvExport");
+    var xlsxLink = document.getElementById("xlsxExport");
+    var supportsFetch = typeof window.fetch === "function";
+
+    function toParams() {
+        var params = new URLSearchParams();
+        var fd = new FormData(form);
+        fd.forEach(function(v, k) {
+            var value = String(v).trim();
+            if (value.length > 0) {
+                params.set(k, value);
+            }
+        });
+        return params;
+    }
+
+    function applyKpi(body) {
+        document.querySelectorAll(".kpi").forEach(function(k) { k.classList.remove("skeleton"); });
+        document.getElementById("gmv").textContent = "$" + Number(body.gmv).toFixed(2);
+        document.getElementById("orderVolume").textContent = String(body.orderVolume);
+        document.getElementById("conversionRate").textContent = Number(body.conversionRatePercent).toFixed(2) + "%";
+        document.getElementById("aov").textContent = "$" + Number(body.averageOrderValue).toFixed(2);
+        document.getElementById("repeatRate").textContent = Number(body.repeatPurchaseRatePercent).toFixed(2) + "%";
+        document.getElementById("fulfillment").textContent = Number(body.fulfillmentTimelinessPercent).toFixed(2) + "%";
+
+        var tbody = document.getElementById("cancelRows");
+        tbody.innerHTML = "";
+        if (!body.cancellationReasons || body.cancellationReasons.length === 0) {
+            var tr = document.createElement("tr");
+            tr.innerHTML = "<td colspan='2'>No cancellation records for selected filters.</td>";
+            tbody.appendChild(tr);
+            return;
+        }
+        body.cancellationReasons.forEach(function(r) {
+            var tr = document.createElement("tr");
+            var reason = document.createElement("td");
+            reason.textContent = String(r.reason);
+            var count = document.createElement("td");
+            count.textContent = String(r.count);
+            tr.appendChild(reason);
+            tr.appendChild(count);
+            tbody.appendChild(tr);
+        });
+    }
+
+    function showKpiSkeleton() {
+        document.querySelectorAll(".kpi").forEach(function(k) {
+            k.classList.add("skeleton");
+            var value = k.querySelector(".value");
+            if (value) {
+                value.textContent = "loading...";
+            }
+        });
+    }
+
+    function loadDashboard() {
+        if (!supportsFetch) {
+            return Promise.resolve();
+        }
+        errorBox.style.display = "none";
+        showKpiSkeleton();
+        var params = toParams();
+        csvLink.href = "/api/analytics/export.csv?" + params.toString();
+        xlsxLink.href = "/api/analytics/export.xlsx?" + params.toString();
+
+        return fetch("/api/analytics/kpis?" + params.toString())
+            .then(function(res) {
+                return res.json().then(function(body) {
+                    return { res: res, body: body };
+                });
+            })
+            .then(function(result) {
+                if (!result.res.ok) {
+                    errorBox.textContent = result.body.message || "Failed to load KPI dashboard.";
+                    errorBox.style.display = "block";
+                    return;
+                }
+                applyKpi(result.body);
+            });
+    }
+
+    function loadPackages() {
+        if (!supportsFetch) {
+            return Promise.resolve();
+        }
+        return fetch("/api/analytics/report-packages")
+            .then(function(res) { return res.json(); })
+            .then(function(body) {
+                var list = document.getElementById("packages");
+                list.innerHTML = "";
+                body.forEach(function(name) {
+                    var li = document.createElement("li");
+                    var a = document.createElement("a");
+                    a.href = "/api/analytics/report-packages/download?file=" + encodeURIComponent(name);
+                    a.textContent = name;
+                    li.appendChild(a);
+                    list.appendChild(li);
+                });
+            });
+    }
+
+    form.addEventListener("submit", function(e) {
+        e.preventDefault();
+        loadDashboard();
+    });
+
+    if (supportsFetch) {
+        loadDashboard();
+        loadPackages();
+    }
+</script>
+</body>
+</html>

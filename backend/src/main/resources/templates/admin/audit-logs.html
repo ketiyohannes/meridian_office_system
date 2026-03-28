@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Audit Logs</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>Admin Audit Logs</h1>
+        <p>Latest 200 administrative actions</p>
+    </div>
+    <div>
+        <a th:href="@{/admin/users}">User Management</a>
+    </div>
+</header>
+
+<main class="content">
+    <section class="card" th:if="${errorMessage}">
+        <div class="alert error" th:text="${errorMessage}">Error</div>
+    </section>
+    <section class="card">
+        <p><a th:href="@{/api/admin/audit-logs(actor=${actor},action=${action},targetUsername=${targetUsername},targetType=${targetType},from=${from},to=${to},page=${currentPage},size=${size})}">View Audit API: /api/admin/audit-logs</a></p>
+
+        <form th:action="@{/admin/audit-logs}" method="get" class="auth-form">
+            <label for="actor">Actor</label>
+            <input id="actor" name="actor" type="text" th:value="${actor}" placeholder="admin">
+
+            <label for="action">Action</label>
+            <select id="action" name="action">
+                <option value="">All actions</option>
+                <option th:each="a : ${actions}" th:value="${a}" th:text="${a}" th:selected="${a == action}">USER_CREATE</option>
+            </select>
+
+            <label for="targetType">Target Type</label>
+            <select id="targetType" name="targetType">
+                <option value="">All target types</option>
+                <option th:each="tt : ${targetTypes}" th:value="${tt}" th:text="${tt}" th:selected="${tt == targetType}">USER</option>
+            </select>
+
+            <label for="targetUsername">Target Username</label>
+            <input id="targetUsername" name="targetUsername" type="text" th:value="${targetUsername}" placeholder="associate01">
+
+            <label for="from">From</label>
+            <input id="from" name="from" type="datetime-local" th:value="${from}">
+
+            <label for="to">To</label>
+            <input id="to" name="to" type="datetime-local" th:value="${to}">
+
+            <label for="size">Page Size</label>
+            <select id="size" name="size">
+                <option th:value="10" th:selected="${size == 10}">10</option>
+                <option th:value="20" th:selected="${size == 20}">20</option>
+                <option th:value="50" th:selected="${size == 50}">50</option>
+                <option th:value="100" th:selected="${size == 100}">100</option>
+            </select>
+
+            <button type="submit">Apply Filters</button>
+        </form>
+
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+            <tr>
+                <th style="text-align:left;">Timestamp</th>
+                <th style="text-align:left;">Actor</th>
+                <th style="text-align:left;">Action</th>
+                <th style="text-align:left;">Target</th>
+                <th style="text-align:left;">Details</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:if="${#lists.isEmpty(logs)}">
+                <td colspan="5">No audit events yet.</td>
+            </tr>
+            <tr th:each="log : ${logs}">
+                <td th:text="${log.createdAt}">2026-01-01T00:00:00Z</td>
+                <td th:text="${log.actorUsername}">admin</td>
+                <td th:text="${log.action}">USER_CREATE</td>
+                <td th:text="${log.targetType + ':' + (log.targetUsername != null ? log.targetUsername : log.targetId)}">USER:admin</td>
+                <td th:text="${log.details}">details</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 16px; display: flex; gap: 12px; align-items: center;">
+            <a th:if="${!logsPage.first}" th:href="@{/admin/audit-logs(actor=${actor},action=${action},targetUsername=${targetUsername},targetType=${targetType},from=${from},to=${to},page=${currentPage - 1},size=${size})}">Previous</a>
+            <span th:text="'Page ' + (${currentPage} + 1) + ' of ' + ${displayTotalPages}">Page 1 of 1</span>
+            <a th:if="${!logsPage.last}" th:href="@{/admin/audit-logs(actor=${actor},action=${action},targetUsername=${targetUsername},targetType=${targetType},from=${from},to=${to},page=${currentPage + 1},size=${size})}">Next</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>
