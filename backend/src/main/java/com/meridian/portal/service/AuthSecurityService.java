@@ -91,21 +91,35 @@ public class AuthSecurityService {
                 roleRepository.save(role);
             }
         });
+        Role adminRole = roleRepository.findByName(RoleName.ADMIN)
+            .orElseThrow(() -> new IllegalStateException("ADMIN role missing during bootstrap"));
 
         String adminUsername = Objects.requireNonNullElse(authProperties.getBootstrapAdminUsername(), "admin").trim();
         String adminPassword = Objects.requireNonNullElse(authProperties.getBootstrapAdminPassword(), "");
         validatePassword(adminPassword);
 
-        userAccountRepository.findByUsername(adminUsername).orElseGet(() -> {
-            Role adminRole = roleRepository.findByName(RoleName.ADMIN)
-                .orElseThrow(() -> new IllegalStateException("ADMIN role missing during bootstrap"));
-
+        userAccountRepository.findByUsername(adminUsername).ifPresentOrElse(existing -> {
+            if (authProperties.isBootstrapAdminResetOnStartup()) {
+                existing.setPasswordHash(passwordEncoder.encode(adminPassword));
+                existing.setEnabled(true);
+                existing.setFailedAttempts(0);
+                existing.setLockedUntil(null);
+                existing.getRoles().add(adminRole);
+                userAccountRepository.save(existing);
+                log.warn("event=auth_bootstrap_admin_updated subject={}", privacyId(adminUsername));
+            } else {
+                log.info("event=auth_bootstrap_admin_exists subject={}", privacyId(adminUsername));
+            }
+        }, () -> {
             UserAccount admin = new UserAccount();
             admin.setUsername(adminUsername);
             admin.setPasswordHash(passwordEncoder.encode(adminPassword));
+            admin.setEnabled(true);
+            admin.setFailedAttempts(0);
+            admin.setLockedUntil(null);
             admin.getRoles().add(adminRole);
             log.warn("event=auth_bootstrap_admin_created subject={}", privacyId(adminUsername));
-            return userAccountRepository.save(admin);
+            userAccountRepository.save(admin);
         });
     }
 

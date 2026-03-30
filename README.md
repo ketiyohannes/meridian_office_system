@@ -2,57 +2,6 @@
 
 This repository is prepared with a Dockerized local development environment.
 
-## Local Quickstart (Non-Docker)
-Run this path if you want to work directly with local Java + Maven + MySQL.
-
-Prerequisites:
-- Java 21+
-- Maven 3.9+
-- MySQL 8+
-
-1. Create a local MySQL database and user:
-   ```sql
-   CREATE DATABASE meridian;
-   CREATE USER 'meridian_user'@'localhost' IDENTIFIED BY 'meridian_password';
-   GRANT ALL PRIVILEGES ON meridian.* TO 'meridian_user'@'localhost';
-   FLUSH PRIVILEGES;
-   ```
-2. Export required environment variables:
-   ```bash
-   # Canonical non-Docker local DB port: 3306
-   # If using Docker MySQL from this repo, use host port 3307 instead.
-   export SPRING_DATASOURCE_URL='jdbc:mysql://localhost:3306/meridian?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Africa/Addis_Ababa'
-   export SPRING_DATASOURCE_USERNAME='meridian_user'
-   export SPRING_DATASOURCE_PASSWORD='meridian_password'
-   export MERIDIAN_BOOTSTRAP_ADMIN_USERNAME='admin'
-   export MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD='AdminPass12345!'
-   export MERIDIAN_DATA_ENCRYPTION_KEY='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'
-   ```
-3. Build:
-   ```bash
-   cd backend
-   mvn -q -DskipTests package
-   ```
-4. Test:
-   ```bash
-   mvn -q test
-   ```
-5. Run:
-   ```bash
-   mvn spring-boot:run
-   ```
-
-Default local port:
-- Application: `http://localhost:8080`
-- MySQL (non-Docker): `localhost:3306`
-- MySQL (Docker compose in this repo): `localhost:3307`
-
-Verification success signals:
-- Startup log contains `Started MeridianPortalApplication`.
-- Login page loads at `http://localhost:8080/login`.
-- After admin login, Home page renders and role-appropriate navigation appears.
-- Admin health page loads at `http://localhost:8080/admin/health`.
-
 ## Services
 - `mysql` (MySQL 8.4): local data persistence
 - `app-dev` (Maven + JDK 21): Spring Boot development container
@@ -79,6 +28,16 @@ On startup, Compose runs `scripts/bootstrap_runtime.sh` automatically to:
 - create runtime config snapshots under `docker/runtime/`.
 
 Optional: edit `.env` if you want to override defaults (ports, DB credentials, bootstrap secrets).
+
+## Access URL
+- Application root: `http://localhost:18080/`
+- Login page: `http://localhost:18080/login`
+
+## Default Admin Login
+- Username: `admin`
+- Password: `LocalDevAdmin!2026`
+
+If you changed `APP_HOST_PORT` in `.env`, replace `18080` with your configured value.
 
 ## Run Tests In Docker
 Run the full backend test suite in containers with one command:

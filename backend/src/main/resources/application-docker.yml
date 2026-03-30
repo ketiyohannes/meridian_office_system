@@ -11,3 +11,7 @@ server:
   servlet:
     session:
       timeout: 30m
+
+meridian:
+  auth:
+    bootstrap-admin-reset-on-startup: true

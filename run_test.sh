@@ -11,6 +11,23 @@ echo "[run_test] bootstrapping .env and runtime config"
 echo "[run_test] ensuring mysql is up"
 docker compose up -d mysql
 
+echo "[run_test] waiting for mysql readiness"
+MYSQL_READY=0
+for attempt in $(seq 1 60); do
+  if docker compose exec -T mysql sh -c "mysqladmin ping -h127.0.0.1 -uroot -p\"\$MYSQL_ROOT_PASSWORD\" --silent" >/dev/null 2>&1; then
+    MYSQL_READY=1
+    echo "[run_test] mysql is ready"
+    break
+  fi
+  sleep 1
+done
+
+if [ "${MYSQL_READY}" -ne 1 ]; then
+  echo "[run_test] mysql did not become ready within 60 seconds"
+  docker compose logs --tail=100 mysql || true
+  exit 1
+fi
+
 echo "[run_test] resetting isolated test database: ${TEST_DB_NAME}"
 docker compose exec -T mysql sh -c \
   "mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -e \"\
@@ -29,10 +46,10 @@ set -e
 
 REPORT_DIR="${ROOT_DIR}/backend/target/surefire-reports"
 if [ -d "${REPORT_DIR}" ]; then
-  TESTS=$(grep -h "<testsuite " "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | sed -n 's/.* tests="\([0-9]\+\)".*/\1/p' | awk '{s+=$1} END{print s+0}')
-  FAILURES=$(grep -h "<testsuite " "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | sed -n 's/.* failures="\([0-9]\+\)".*/\1/p' | awk '{s+=$1} END{print s+0}')
-  ERRORS=$(grep -h "<testsuite " "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | sed -n 's/.* errors="\([0-9]\+\)".*/\1/p' | awk '{s+=$1} END{print s+0}')
-  SKIPPED=$(grep -h "<testsuite " "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | sed -n 's/.* skipped="\([0-9]\+\)".*/\1/p' | awk '{s+=$1} END{print s+0}')
+  TESTS=$(grep -hEo 'tests="[0-9]+"' "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | awk -F'"' '{s+=$2} END{print s+0}')
+  FAILURES=$(grep -hEo 'failures="[0-9]+"' "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | awk -F'"' '{s+=$2} END{print s+0}')
+  ERRORS=$(grep -hEo 'errors="[0-9]+"' "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | awk -F'"' '{s+=$2} END{print s+0}')
+  SKIPPED=$(grep -hEo 'skipped="[0-9]+"' "${REPORT_DIR}"/TEST-*.xml 2>/dev/null | awk -F'"' '{s+=$2} END{print s+0}')
   PASSED=$((TESTS - FAILURES - ERRORS - SKIPPED))
   echo "[run_test] summary: Passed=${PASSED} Failed=${FAILURES} Errors=${ERRORS} Skipped=${SKIPPED} Total=${TESTS}"
 else

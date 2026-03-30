@@ -10,6 +10,7 @@ public class AuthProperties {
     private int lockoutMinutes = 15;
     private String bootstrapAdminUsername = "admin";
     private String bootstrapAdminPassword = "";
+    private boolean bootstrapAdminResetOnStartup = false;
 
     public int getMinPasswordLength() {
         return minPasswordLength;
@@ -49,5 +50,13 @@ public class AuthProperties {
 
     public void setBootstrapAdminPassword(String bootstrapAdminPassword) {
         this.bootstrapAdminPassword = bootstrapAdminPassword;
+    }
+
+    public boolean isBootstrapAdminResetOnStartup() {
+        return bootstrapAdminResetOnStartup;
+    }
+
+    public void setBootstrapAdminResetOnStartup(boolean bootstrapAdminResetOnStartup) {
+        this.bootstrapAdminResetOnStartup = bootstrapAdminResetOnStartup;
     }
 }
