@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Personal Tasks</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .grid { display:grid; grid-template-columns:2fr 1fr; gap:16px; }
+        .panel { background:#fff; border:1px solid #dbe3ee; border-radius:12px; padding:16px; margin-bottom:16px; }
+        table th, table td { text-align:left; padding:8px; border-bottom:1px solid #edf2f7; }
+        .skeleton-row td { color: transparent; background: linear-gradient(90deg,#eef2f7 25%,#f7fafc 37%,#eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.2s infinite; }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+        @media (max-width: 920px) { .grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div><h1>Personal Tasks</h1><p class="muted" th:text="'Signed in as ' + ${username}">Signed in as user</p></div>
+    <div><a th:href="@{/}">Home</a></div>
+</header>
+
+<main class="content">
+    <div class="grid">
+        <div>
+            <section class="panel">
+                <h2>My Tasks</h2>
+                <p class="section-intro">Complete assigned work items and track due times in one place.</p>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead><tr><th>Title</th><th>Status</th><th>Due</th><th>Action</th></tr></thead>
+                    <tbody id="taskRows"></tbody>
+                </table>
+                <div id="taskError" class="alert error" style="display:none;"></div>
+            </section>
+        </div>
+        <div>
+            <section class="panel">
+                <h2>Request Exception</h2>
+                <p class="section-intro">Submit an exception when a task or shift requires manager approval.</p>
+                <form id="exceptionForm" class="auth-form">
+                    <label>Type</label>
+                    <input name="requestType" type="text" maxlength="64" placeholder="SHIFT_EXCEPTION" required>
+                    <label>Details</label>
+                    <textarea name="details" maxlength="2000" required></textarea>
+                    <button type="submit">Submit Request</button>
+                    <div id="exError" class="alert error" style="display:none;"></div>
+                    <div id="exSuccess" class="alert success" style="display:none;"></div>
+                </form>
+            </section>
+            <section class="panel">
+                <h2>My Exception Requests</h2>
+                <p class="section-intro">Track request status updates from pending to approved/rejected.</p>
+                <ul id="myExceptions"></ul>
+            </section>
+        </div>
+    </div>
+</main>
+
+<script>
+    var csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+    var csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+    var headers = { "Content-Type": "application/json" };
+    headers[csrfHeader] = csrfToken;
+
+    var taskRows = document.getElementById("taskRows");
+    var taskError = document.getElementById("taskError");
+    var exForm = document.getElementById("exceptionForm");
+    var exError = document.getElementById("exError");
+    var exSuccess = document.getElementById("exSuccess");
+    var myExceptions = document.getElementById("myExceptions");
+    var supportsFetch = typeof window.fetch === "function";
+
+    function showTaskSkeleton() {
+        taskRows.innerHTML = "";
+        for (var i = 0; i < 5; i += 1) {
+            var tr = document.createElement("tr");
+            tr.className = "skeleton-row";
+            tr.innerHTML = "<td>loading</td><td>loading</td><td>loading</td><td>loading</td>";
+            taskRows.appendChild(tr);
+        }
+    }
+
+    function loadTasks() {
+        if (!supportsFetch) {
+            return Promise.resolve();
+        }
+        showTaskSkeleton();
+        return fetch("/api/tasks/my?page=0&size=20", { credentials: "same-origin" })
+            .then(function(res) {
+                return res.json().then(function(body) {
+                    return { res: res, body: body };
+                });
+            })
+            .then(function(result) {
+                var res = result.res;
+                var body = result.body;
+                taskRows.innerHTML = "";
+                if (!res.ok) {
+                    taskError.textContent = body.message || "Failed to load tasks.";
+                    taskError.style.display = "block";
+                    return;
+                }
+                taskError.style.display = "none";
+
+                if (!body.content || body.content.length === 0) {
+                    var tr = document.createElement("tr");
+                    var td = document.createElement("td");
+                    td.colSpan = 4;
+                    td.textContent = "No tasks assigned.";
+                    tr.appendChild(td);
+                    taskRows.appendChild(tr);
+                    return;
+                }
+
+                body.content.forEach(function(task) {
+                    var tr = document.createElement("tr");
+                    var title = document.createElement("td");
+                    title.textContent = task.title;
+                    var status = document.createElement("td");
+                    status.textContent = task.status;
+                    var due = document.createElement("td");
+                    due.textContent = task.dueAt ? new Date(task.dueAt).toLocaleString() : "-";
+                    var action = document.createElement("td");
+
+                    if (task.status !== "COMPLETED") {
+                        var btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.textContent = "Complete";
+                        btn.onclick = function() {
+                            fetch("/api/tasks/" + task.id + "/complete", {
+                                method: "PUT",
+                                credentials: "same-origin",
+                                headers: headers
+                            }).then(function() {
+                                return loadTasks();
+                            });
+                        };
+                        action.appendChild(btn);
+                    } else {
+                        action.textContent = "-";
+                    }
+
+                    tr.appendChild(title);
+                    tr.appendChild(status);
+                    tr.appendChild(due);
+                    tr.appendChild(action);
+                    taskRows.appendChild(tr);
+                    });
+            });
+    }
+
+    function loadMyExceptions() {
+        if (!supportsFetch) {
+            return Promise.resolve();
+        }
+        return fetch("/api/exceptions/mine", { credentials: "same-origin" })
+            .then(function(res) {
+                return res.json().then(function(body) {
+                    return { res: res, body: body };
+                });
+            })
+            .then(function(result) {
+                var res = result.res;
+                var body = result.body;
+                myExceptions.innerHTML = "";
+                if (!res.ok) {
+                    var failedLi = document.createElement("li");
+                    failedLi.textContent = "Failed to load exception requests.";
+                    myExceptions.appendChild(failedLi);
+                    return;
+                }
+                if (!body.length) {
+                    var emptyLi = document.createElement("li");
+                    emptyLi.textContent = "No exception requests yet.";
+                    myExceptions.appendChild(emptyLi);
+                    return;
+                }
+                body.forEach(function(item) {
+                    var li = document.createElement("li");
+                    li.textContent = item.requestKey + " - " + item.requestType + " - " + item.status;
+                    myExceptions.appendChild(li);
+                });
+            });
+    }
+
+    exForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        if (!supportsFetch) {
+            return;
+        }
+        exError.style.display = "none";
+        exSuccess.style.display = "none";
+        var fd = new FormData(exForm);
+        var payload = {
+            requestType: String(fd.get("requestType")).trim(),
+            details: String(fd.get("details")).trim()
+        };
+        fetch("/api/exceptions", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: headers,
+                body: JSON.stringify(payload)
+            })
+            .then(function(res) {
+                return res.json().then(function(body) {
+                    return { res: res, body: body };
+                });
+            })
+            .then(function(result) {
+                var res = result.res;
+                var body = result.body;
+                if (!res.ok) {
+                    exError.textContent = body.message || "Failed to submit exception.";
+                    exError.style.display = "block";
+                    return;
+                }
+                exSuccess.textContent = "Exception request submitted: " + body.requestKey;
+                exSuccess.style.display = "block";
+                exForm.reset();
+                return loadMyExceptions();
+            });
+    });
+
+    if (supportsFetch) {
+        setTimeout(function() {
+            loadTasks();
+            loadMyExceptions();
+        }, 50);
+    }
+</script>
+</body>
+</html>

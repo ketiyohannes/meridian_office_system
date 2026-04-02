@@ -1,0 +1,35 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ:-Africa/Addis_Ababa}
+    volumes:
+      - ./.mysql-data:/var/lib/mysql
+
+  app:
+    image: ${MERIDIAN_APP_IMAGE:-meridian/portal}:${MERIDIAN_APP_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Africa/Addis_Ababa
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      MERIDIAN_BOOTSTRAP_ADMIN_USERNAME: ${MERIDIAN_BOOTSTRAP_ADMIN_USERNAME}
+      MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD: ${MERIDIAN_BOOTSTRAP_ADMIN_PASSWORD}
+      MERIDIAN_DATA_ENCRYPTION_KEY: ${MERIDIAN_DATA_ENCRYPTION_KEY}
+      MERIDIAN_REPORTING_SHARED_FOLDER: ${MERIDIAN_REPORTING_SHARED_FOLDER}
+      MERIDIAN_REPORTING_RETENTION_DAYS: ${MERIDIAN_REPORTING_RETENTION_DAYS}
+      TZ: ${TZ:-Africa/Addis_Ababa}
+    ports:
+      - "${APP_HOST_PORT:-18080}:8080"

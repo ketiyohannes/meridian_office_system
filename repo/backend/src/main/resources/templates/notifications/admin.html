@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Notification Admin</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .panel { background: #fff; border: 1px solid #dbe3ee; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        table th, table td { padding: 8px; border-bottom: 1px solid #edf2f7; text-align: left; vertical-align: top; }
+        textarea { width: 100%; min-height: 72px; font: inherit; border: 1px solid #c6d1df; border-radius: 8px; padding: 8px; }
+        input[type="number"], input[type="text"] { width: 100%; }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>Notification Administration</h1>
+        <p>Manage templates and event definitions</p>
+    </div>
+    <div><a th:href="@{/}">Home</a></div>
+</header>
+
+<main class="content">
+    <div id="pageError" class="alert error" style="display:none;"></div>
+    <div id="pageSuccess" class="alert success" style="display:none;"></div>
+
+    <section class="panel">
+        <h2>Templates</h2>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th>Topic</th>
+                <th>Title</th>
+                <th>Body</th>
+                <th>Active</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="templateBody"></tbody>
+        </table>
+    </section>
+
+    <section class="panel">
+        <h2>Event Definitions</h2>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th>Topic</th>
+                <th>Interval (min)</th>
+                <th>Max reminders</th>
+                <th>Actionable</th>
+                <th>Active</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="definitionBody"></tbody>
+        </table>
+    </section>
+</main>
+
+<script>
+    const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+    const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+    const headers = { "Content-Type": "application/json" };
+    headers[csrfHeader] = csrfToken;
+
+    const templateBody = document.getElementById("templateBody");
+    const definitionBody = document.getElementById("definitionBody");
+    const pageError = document.getElementById("pageError");
+    const pageSuccess = document.getElementById("pageSuccess");
+
+    function showError(message) {
+        pageSuccess.style.display = "none";
+        pageError.textContent = message;
+        pageError.style.display = "block";
+    }
+
+    function showSuccess(message) {
+        pageError.style.display = "none";
+        pageSuccess.textContent = message;
+        pageSuccess.style.display = "block";
+    }
+
+    function clearBanner() {
+        pageError.style.display = "none";
+        pageSuccess.style.display = "none";
+    }
+
+    async function loadTemplates() {
+        const res = await fetch("/api/admin/notifications/templates");
+        const body = await res.json();
+        if (!res.ok) {
+            showError(body.message || "Failed to load templates.");
+            return;
+        }
+        templateBody.textContent = "";
+        body.forEach((item) => {
+            const row = document.createElement("tr");
+            const topicTd = document.createElement("td");
+            topicTd.textContent = String(item.topic);
+
+            const titleTd = document.createElement("td");
+            const titleInput = document.createElement("input");
+            titleInput.type = "text";
+            titleInput.setAttribute("data-field", "title");
+            titleInput.value = String(item.titleTemplate ?? "");
+            titleTd.appendChild(titleInput);
+
+            const bodyTd = document.createElement("td");
+            const bodyInput = document.createElement("textarea");
+            bodyInput.setAttribute("data-field", "body");
+            bodyInput.value = String(item.bodyTemplate ?? "");
+            bodyTd.appendChild(bodyInput);
+
+            const activeTd = document.createElement("td");
+            const activeInput = document.createElement("input");
+            activeInput.type = "checkbox";
+            activeInput.setAttribute("data-field", "active");
+            activeInput.checked = !!item.active;
+            activeTd.appendChild(activeInput);
+
+            const actionTd = document.createElement("td");
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.textContent = "Save";
+            actionTd.appendChild(saveBtn);
+            row.append(topicTd, titleTd, bodyTd, activeTd, actionTd);
+
+            saveBtn.onclick = async () => {
+                clearBanner();
+                const payload = {
+                    titleTemplate: titleInput.value,
+                    bodyTemplate: bodyInput.value,
+                    active: activeInput.checked
+                };
+                const updateRes = await fetch("/api/admin/notifications/templates/" + item.topic, {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: headers,
+                    body: JSON.stringify(payload)
+                });
+                const updateBody = await updateRes.json();
+                if (!updateRes.ok) {
+                    const msg = updateBody.message || (updateBody.details && updateBody.details.join(", ")) || "Template update failed.";
+                    showError(msg);
+                    return;
+                }
+                showSuccess("Template updated for " + item.topic + ".");
+            };
+            templateBody.appendChild(row);
+        });
+    }
+
+    async function loadDefinitions() {
+        const res = await fetch("/api/admin/notifications/definitions");
+        const body = await res.json();
+        if (!res.ok) {
+            showError(body.message || "Failed to load event definitions.");
+            return;
+        }
+        definitionBody.textContent = "";
+        body.forEach((item) => {
+            const row = document.createElement("tr");
+            const topicTd = document.createElement("td");
+            topicTd.textContent = String(item.topic);
+
+            const intervalTd = document.createElement("td");
+            const intervalInput = document.createElement("input");
+            intervalInput.type = "number";
+            intervalInput.min = "1";
+            intervalInput.max = "240";
+            intervalInput.value = String(item.reminderIntervalMinutes);
+            intervalInput.setAttribute("data-field", "interval");
+            intervalTd.appendChild(intervalInput);
+
+            const maxTd = document.createElement("td");
+            const maxInput = document.createElement("input");
+            maxInput.type = "number";
+            maxInput.min = "1";
+            maxInput.max = "3";
+            maxInput.value = String(item.maxReminders);
+            maxInput.setAttribute("data-field", "maxReminders");
+            maxTd.appendChild(maxInput);
+
+            const actionableTd = document.createElement("td");
+            const actionableInput = document.createElement("input");
+            actionableInput.type = "checkbox";
+            actionableInput.setAttribute("data-field", "actionable");
+            actionableInput.checked = !!item.actionable;
+            actionableTd.appendChild(actionableInput);
+
+            const activeTd = document.createElement("td");
+            const activeInput = document.createElement("input");
+            activeInput.type = "checkbox";
+            activeInput.setAttribute("data-field", "active");
+            activeInput.checked = !!item.active;
+            activeTd.appendChild(activeInput);
+
+            const actionTd = document.createElement("td");
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.textContent = "Save";
+            actionTd.appendChild(saveBtn);
+            row.append(topicTd, intervalTd, maxTd, actionableTd, activeTd, actionTd);
+
+            saveBtn.onclick = async () => {
+                clearBanner();
+                const payload = {
+                    reminderIntervalMinutes: Number(intervalInput.value),
+                    maxReminders: Number(maxInput.value),
+                    actionable: actionableInput.checked,
+                    active: activeInput.checked
+                };
+                const updateRes = await fetch("/api/admin/notifications/definitions/" + item.topic, {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: headers,
+                    body: JSON.stringify(payload)
+                });
+                const updateBody = await updateRes.json();
+                if (!updateRes.ok) {
+                    const msg = updateBody.message || (updateBody.details && updateBody.details.join(", ")) || "Definition update failed.";
+                    showError(msg);
+                    return;
+                }
+                showSuccess("Definition updated for " + item.topic + ".");
+            };
+            definitionBody.appendChild(row);
+        });
+    }
+
+    loadTemplates();
+    loadDefinitions();
+</script>
+</body>
+</html>

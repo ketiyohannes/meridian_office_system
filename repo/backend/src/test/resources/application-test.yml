@@ -1,0 +1,6 @@
+meridian:
+  auth:
+    bootstrap-admin-username: admin
+    bootstrap-admin-password: AdminPass12345!
+  security:
+    data-encryption-key: ABCDEFGHIJKLMNOPQRSTUVWX12345678

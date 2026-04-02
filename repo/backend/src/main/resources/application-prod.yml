@@ -1,0 +1,17 @@
+spring:
+  thymeleaf:
+    cache: true
+
+server:
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        secure: true
+        http-only: true
+        same-site: strict
+
+logging:
+  level:
+    root: INFO
+    com.meridian.portal: INFO

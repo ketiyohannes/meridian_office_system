@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <title>Discovery Rules</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <style>
+        .panel { background:#fff; border:1px solid #dbe3ee; border-radius:12px; padding:16px; margin-bottom:16px; }
+        table th, table td { text-align:left; padding:8px; border-bottom:1px solid #edf2f7; }
+        .inline { display:flex; gap:8px; flex-wrap:wrap; }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>Discovery Rules</h1>
+        <p>Manage SKU discovery behavior</p>
+    </div>
+    <div><a th:href="@{/discovery}">Back to Discovery</a></div>
+</header>
+
+<main class="content">
+    <section class="panel">
+        <h2>Create Rule</h2>
+        <form id="createForm" class="auth-form">
+            <label>Name</label>
+            <input name="name" type="text" maxlength="120" required>
+            <label>Rule Type</label>
+            <select name="ruleType" required>
+                <option value="EXCLUDE_SKU">EXCLUDE_SKU</option>
+                <option value="PIN_SKU">PIN_SKU</option>
+            </select>
+            <label>Target Value (SKU)</label>
+            <input name="targetValue" type="text" maxlength="120" required>
+            <label>Priority (1-1000)</label>
+            <input name="priority" type="number" min="1" max="1000" value="100" required>
+            <label><input name="active" type="checkbox" checked> Active</label>
+            <button type="submit">Create</button>
+            <div id="createError" class="alert error" style="display:none;"></div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Existing Rules</h2>
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr><th>ID</th><th>Name</th><th>Type</th><th>Target</th><th>Priority</th><th>Active</th><th>Action</th></tr>
+            </thead>
+            <tbody id="ruleRows"></tbody>
+        </table>
+    </section>
+</main>
+
+<script>
+    const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+    const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+    const headers = { "Content-Type": "application/json" };
+    headers[csrfHeader] = csrfToken;
+
+    const form = document.getElementById("createForm");
+    const rows = document.getElementById("ruleRows");
+    const createError = document.getElementById("createError");
+
+    function escapeText(value) {
+        return value == null ? "" : String(value);
+    }
+
+    async function loadRules() {
+        const res = await fetch("/api/discovery/rules", { credentials: "same-origin" });
+        const body = await res.json();
+        rows.innerHTML = "";
+        if (!res.ok) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 7;
+            td.textContent = "Failed to load rules.";
+            tr.appendChild(td);
+            rows.appendChild(tr);
+            return;
+        }
+
+        body.forEach((rule) => {
+            const tr = document.createElement("tr");
+            const fields = [rule.id, rule.name, rule.ruleType, rule.targetValue, rule.priority, rule.active ? "Yes" : "No"];
+            fields.forEach((value) => {
+                const td = document.createElement("td");
+                td.textContent = escapeText(value);
+                tr.appendChild(td);
+            });
+            const action = document.createElement("td");
+            const del = document.createElement("button");
+            del.type = "button";
+            del.textContent = "Delete";
+            del.onclick = async () => {
+                await fetch("/api/discovery/rules/" + rule.id, { method: "DELETE", credentials: "same-origin", headers: headers });
+                await loadRules();
+            };
+            action.appendChild(del);
+            tr.appendChild(action);
+            rows.appendChild(tr);
+        });
+    }
+
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        createError.style.display = "none";
+        const fd = new FormData(form);
+        const payload = {
+            name: String(fd.get("name")).trim(),
+            ruleType: String(fd.get("ruleType")).trim(),
+            targetValue: String(fd.get("targetValue")).trim(),
+            priority: Number(fd.get("priority")),
+            active: fd.get("active") === "on",
+            matchValue: null
+        };
+        const res = await fetch("/api/discovery/rules", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: headers,
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const body = await res.json();
+            createError.textContent = body.message || "Failed to create rule";
+            createError.style.display = "block";
+            return;
+        }
+        form.reset();
+        await loadRules();
+    });
+
+    loadRules();
+</script>
+</body>
+</html>

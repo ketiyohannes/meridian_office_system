@@ -1,0 +1,7 @@
+.env
+.mysql-data/
+target/
+**/target/
+**/surefire-reports/
+**/*.dump
+**/*.dumpstream
